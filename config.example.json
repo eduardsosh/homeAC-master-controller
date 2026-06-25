@@ -1,0 +1,31 @@
+{
+  "mqtt": {
+    "host": "192.168.0.213",
+    "port": 1883,
+    "client_id": "master-controller",
+    "lwt_topic": "master/lwt"
+  },
+  "topics": {
+    "aranet_status": "aranet/status",
+    "aranet_lwt": "aranet/lwt",
+    "aranet_availability": "aranet/availability",
+    "aranet_command": "aranet/command",
+    "ac_command": "ac/command",
+    "ac_status": "ac/status",
+    "ac_lwt": "ac/lwt"
+  },
+  "control": {
+    "enabled": true,
+    "mode": "cool",
+    "fan": "auto",
+    "setpoint_c": 22.0,
+    "deadband_c": 0.5,
+    "ac_temp": 22,
+    "control_interval_s": 30,
+    "sensor_stale_s": 2400
+  },
+  "web": {
+    "host": "0.0.0.0",
+    "port": 8000
+  }
+}
