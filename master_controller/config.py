@@ -33,7 +33,7 @@ DEFAULTS: dict[str, Any] = {
         "ac_lwt": "ac/lwt",
     },
     "control": {
-        "enabled": True,
+        "enabled": False,
         "mode": "cool",
         "fan": "auto",
         "setpoint_c": 22.0,

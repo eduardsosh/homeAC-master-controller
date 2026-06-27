@@ -15,7 +15,7 @@
     "ac_lwt": "ac/lwt"
   },
   "control": {
-    "enabled": true,
+    "enabled": false,
     "mode": "cool",
     "fan": "auto",
     "setpoint_c": 22.0,

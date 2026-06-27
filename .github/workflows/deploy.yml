@@ -1,0 +1,27 @@
+name: Deploy
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted   # or a custom label you assigned the runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stop service
+        run: nssm stop ACmaster   # your actual NSSM service name
+
+      - name: Sync code (preserve the venv!)
+        shell: pwsh
+        run: |
+          robocopy . C:\homeAC-master-controller-main /MIR /XD .venv .git __pycache__
+          if ($LASTEXITCODE -lt 8) { exit 0 } else { exit $LASTEXITCODE }
+
+      - name: Install requirements
+        shell: pwsh
+        run: |
+          & "C:\homeAC-master-controller-main\.venv\Scripts\python.exe" -m pip install -r "C:\homeAC-master-controller-main\requirements.txt"
+
+      - name: Start service
+        run: nssm start ACmaster
