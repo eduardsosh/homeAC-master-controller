@@ -22,7 +22,10 @@
     "deadband_c": 0.5,
     "ac_temp": 22,
     "control_interval_s": 30,
-    "sensor_stale_s": 2400
+    "sensor_stale_s": 2400,
+    "sun_window_start": "10:00",
+    "sun_window_end": "18:00",
+    "off_after": "21:00"
   },
   "web": {
     "host": "0.0.0.0",

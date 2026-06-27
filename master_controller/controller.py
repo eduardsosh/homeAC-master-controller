@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import datetime, time as dt_time
 from typing import Any
 
 from .config import Config
@@ -25,6 +26,13 @@ from .mqtt_client import MqttBridge
 from .state import State
 
 log = logging.getLogger(__name__)
+
+
+def _parse_hhmm(value: str) -> dt_time:
+    """Parse an ``HH:MM`` string into a ``time``. Config validates on write, so
+    a malformed value here means hand-edited config — fail loud."""
+    hours, minutes = value.split(":")
+    return dt_time(int(hours), int(minutes))
 
 
 class Controller:
@@ -70,6 +78,16 @@ class Controller:
             self._state.set_reason("AC ESP32 offline (ac/lwt) — not commanding")
             return
 
+        # --- Sun gate + hard curfew: only run while the sun reaches the flat, --
+        # and never at/after the curfew. Overrides regulation (and runs before
+        # the sensor check, so we hold the AC off at night regardless of sensor
+        # health). ----------------------------------------------------------
+        allowed, gate_reason = self._sun_curfew_gate(ctrl)
+        if not allowed:
+            self._desired_power = False
+            self._command(power=False, ctrl=ctrl, reason=gate_reason)
+            return
+
         # --- Failover: blind on temperature -> fail safe (command AC off). --
         sensor_dead = (
             snap["sensor"] is None
@@ -109,6 +127,33 @@ class Controller:
             f"({mode}) -> AC {'ON' if self._desired_power else 'OFF'}"
         )
         self._command(power=self._desired_power, ctrl=ctrl, reason=reason)
+
+    def _sun_curfew_gate(self, ctrl: dict[str, Any]) -> tuple[bool, str]:
+        """Decide whether the AC is allowed to run *right now* by local clock.
+
+        Two independent rules, both must hold to allow running:
+          * **Curfew** — at/after ``off_after`` the AC is forced off and may not
+            come back on. This is the hard rule ("off at 21:00, never after").
+          * **Sun window** — otherwise the AC may only run inside
+            ``[sun_window_start, sun_window_end)``, the hours the sun reaches
+            the apartment.
+
+        Returns ``(allowed, reason)``; ``reason`` explains the off decision when
+        not allowed (and is unused when allowed).
+        """
+        now = datetime.now().time()
+        off_after = _parse_hhmm(ctrl["off_after"])
+        if now >= off_after:
+            return False, f"after curfew {ctrl['off_after']} — AC forced off"
+
+        start = _parse_hhmm(ctrl["sun_window_start"])
+        end = _parse_hhmm(ctrl["sun_window_end"])
+        if not (start <= now < end):
+            return False, (
+                f"outside sun window {ctrl['sun_window_start']}–{ctrl['sun_window_end']} "
+                f"— AC off (no sun on the flat)"
+            )
+        return True, ""
 
     def _command(self, power: bool, ctrl: dict[str, Any], reason: str) -> None:
         """Build the desired command and publish only if it changed."""

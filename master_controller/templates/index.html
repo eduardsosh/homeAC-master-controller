@@ -43,6 +43,7 @@
       <div>Aranet ESP32: <span id="aranet_lwt" class="pill">?</span></div>
       <div>Sensor: <span id="aranet_avail" class="pill">?</span></div>
       <div>AC ESP32: <span id="ac_lwt" class="pill">?</span></div>
+      <div class="reason" id="batteries"></div>
       <div class="reason" id="sensorage"></div>
     </div>
     <div class="card">
@@ -64,6 +65,9 @@
       <div><label>Setpoint °C</label><input name="setpoint_c" type="number" step="0.5" style="width:5rem"></div>
       <div><label>Deadband ±°C</label><input name="deadband_c" type="number" step="0.1" style="width:5rem"></div>
       <div><label>AC temp °C</label><input name="ac_temp" type="number" step="1" style="width:5rem"></div>
+      <div><label>Sun from</label><input name="sun_window_start" type="time"></div>
+      <div><label>Sun until</label><input name="sun_window_end" type="time"></div>
+      <div><label>Off after</label><input name="off_after" type="time"></div>
       <div><button type="submit">Save</button></div>
     </form>
   </div>
@@ -107,6 +111,9 @@ async function refresh() {
   pill(document.getElementById("aranet_lwt"), s.aranet_lwt);
   pill(document.getElementById("aranet_avail"), s.aranet_avail);
   pill(document.getElementById("ac_lwt"), s.ac_lwt);
+  document.getElementById("batteries").textContent = s.sensor
+    ? `module battery ${s.sensor.esp32_battery ?? "?"}% · sensor battery ${s.sensor.battery ?? "?"}%`
+    : "";
   document.getElementById("sensorage").textContent =
     s.sensor_age_s != null ? `last reading ${Math.round(s.sensor_age_s)} s ago` : "";
   document.getElementById("reason").textContent = s.control_reason;
@@ -120,6 +127,8 @@ async function loadConfig() {
   f.enabled.value = String(c.enabled);
   f.mode.value = c.mode; f.fan.value = c.fan;
   f.setpoint_c.value = c.setpoint_c; f.deadband_c.value = c.deadband_c; f.ac_temp.value = c.ac_temp;
+  f.sun_window_start.value = c.sun_window_start; f.sun_window_end.value = c.sun_window_end;
+  f.off_after.value = c.off_after;
 }
 
 document.getElementById("cfgform").addEventListener("submit", async (e) => {
@@ -129,7 +138,9 @@ document.getElementById("cfgform").addEventListener("submit", async (e) => {
     body: JSON.stringify({
       enabled: f.enabled.value === "true", mode: f.mode.value, fan: f.fan.value,
       setpoint_c: parseFloat(f.setpoint_c.value), deadband_c: parseFloat(f.deadband_c.value),
-      ac_temp: parseInt(f.ac_temp.value) }) });
+      ac_temp: parseInt(f.ac_temp.value),
+      sun_window_start: f.sun_window_start.value, sun_window_end: f.sun_window_end.value,
+      off_after: f.off_after.value }) });
   refresh();
 });
 

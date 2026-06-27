@@ -42,6 +42,40 @@ python -m master_controller --config config.json --db history.db
 Single process: paho's network loop and the control loop each run on a background thread;
 Flask serves on the main thread. Shared state is guarded by locks in `state.py` / `config.py`.
 
+## Tests
+
+Tests live in `tests/` and run on the **stdlib `unittest`** — no pytest, no extra deps, so the
+deployed venv can run them as-is during CD:
+
+```bash
+python -m unittest discover -s tests -t . -v
+```
+
+`tests/test_smoke.py` is a **deployment smoke test**: it builds the real Flask app via
+`create_app()` with a real `Config`/`State`/`Store` but a **mocked MQTT bridge and controller**
+(`MagicMock`), so no broker or control thread is needed. It drives the app through Flask's test
+client to exercise the parts that actually break a deploy — routing, JSON serialisation, template
+rendering, config and DB wiring — without binding a port. It covers `/`, `/api/status`,
+`/api/config`, `/api/history`, and `POST /api/ac/command` (asserting the command reaches the
+mocked MQTT bridge). Keep new tests dependency-free and broker-free in the same spirit.
+
+## Deployment (CD)
+
+Pushes to `main` trigger `.github/workflows/deploy.yml`, which runs on a **self-hosted GitHub
+Actions runner** on the Windows server itself. The pipeline:
+
+1. **Checkout** the pushed commit.
+2. **Run smoke tests** with the deployed venv's python (`C:\homeAC-master-controller-main\.venv\Scripts\python.exe`). A test failure aborts the deploy before any code is touched.
+3. **Stop the service** — `nssm stop ACmaster`.
+4. **Sync code** with `robocopy . C:\homeAC-master-controller-main /MIR`, **excluding `.venv`, `.git`, `__pycache__`** so the live venv survives the mirror. (`robocopy` exit codes <8 are success and are remapped to `0`.)
+5. **Install requirements** into the live venv.
+6. **Start the service** — `nssm start ACmaster`.
+7. **Verify status** — wait 5 s, then assert `nssm status ACmaster` is `SERVICE_RUNNING`, failing the job otherwise. NSSM emits status with embedded null bytes, so the step strips non-`[A-Z_]` characters before comparing.
+
+The service is run under NSSM as **`ACmaster`**, deployed to **`C:\homeAC-master-controller-main`**.
+The venv there is treated as durable state — never mirror over it. See `README.md` for the manual
+NSSM/Task Scheduler install steps.
+
 ## Code layout
 
 | File | Responsibility |
@@ -98,8 +132,11 @@ own (e.g. `master-controller`). Two brokers conventions to follow:
 default; the Aranet sets its own interval):
 ```json
 { "co2": 612, "temperature": 21.5, "humidity": 45,
-  "pressure": 1013.2, "battery": 90, "interval": 300, "ago": 42 }
+  "pressure": 1013.2, "battery": 90, "interval": 300, "ago": 42,
+  "esp32_battery": 75 }
 ```
+`battery` is the Aranet4's own internal battery; `esp32_battery` is the sensor
+module's 18650 cell (the ESP32 that bridges BLE→MQTT).
 
 **`ac/command`** (controller → AC). All fields optional — send only what changes. `power` is the
 **desired state**, not a toggle: the ESP32 tracks the AC's believed power and sends an IR toggle
@@ -129,6 +166,19 @@ won't need it).
   is pointless — only publish when the desired AC state actually changes.
 - The Aranet's sample interval is coarse. If you need a fresher reading for a decision, publish
   `{"read": true}` to `aranet/command` to force an out-of-band sensor read.
+
+### Time-of-day gating (sun window + curfew)
+Regulation only runs inside an allowed local-time window; outside it the controller forces the
+AC **off** (and clears `_desired_power`, so hysteresis memory can't carry an ON state across the
+boundary). Two `control.*` keys, both `"HH:MM"` local time, both panel-editable:
+- **`sun_window_start` / `sun_window_end`** — the hours the sun actually reaches the apartment
+  (set by window orientation/obstructions, *not* astronomical sunrise/sunset). The AC may only
+  run inside `[start, end)`.
+- **`off_after`** — hard curfew. At/after this time the AC is forced off and may never come on,
+  overriding both the sun window and temperature. This is the stricter rule and is checked first.
+
+The gate (`Controller._sun_curfew_gate`) runs *before* the sensor-staleness failover, so at night
+the AC stays off regardless of sensor health.
 
 ### Safety / failover
 The master controller is a watchdog as well as a regulator. Define explicit behaviour for these

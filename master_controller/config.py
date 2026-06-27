@@ -41,6 +41,14 @@ DEFAULTS: dict[str, Any] = {
         "ac_temp": 22,
         "control_interval_s": 30,
         "sensor_stale_s": 2400,
+        # Sun gate: the AC is only allowed to run inside this local-time window
+        # (when the sun actually reaches the apartment) — set it to match your
+        # windows' orientation, not astronomical sunrise/sunset.
+        "sun_window_start": "10:00",
+        "sun_window_end": "18:00",
+        # Hard curfew: at/after this local time the AC is forced off and may
+        # never come on, regardless of temperature or the sun window.
+        "off_after": "21:00",
     },
     "web": {
         "host": "0.0.0.0",
@@ -60,6 +68,9 @@ EDITABLE = {
         "ac_temp",
         "control_interval_s",
         "sensor_stale_s",
+        "sun_window_start",
+        "sun_window_end",
+        "off_after",
     }
 }
 
@@ -122,6 +133,7 @@ class Config:
 
 _FLOAT_KEYS = {"setpoint_c", "deadband_c"}
 _INT_KEYS = {"ac_temp", "control_interval_s", "sensor_stale_s"}
+_TIME_KEYS = {"sun_window_start", "sun_window_end", "off_after"}
 
 
 def _coerce_control(key: str, value: Any) -> Any:
@@ -132,4 +144,17 @@ def _coerce_control(key: str, value: Any) -> Any:
         return float(value)
     if key in _INT_KEYS:
         return int(float(value))
+    if key in _TIME_KEYS:
+        return _coerce_time(value)
     return str(value)
+
+
+def _coerce_time(value: Any) -> str:
+    """Validate and normalise an ``HH:MM`` local-time string. Raises ValueError
+    on malformed input so bad panel edits are rejected rather than silently
+    breaking the sun/curfew gate."""
+    hours, minutes = str(value).strip().split(":")
+    h, m = int(hours), int(minutes)
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise ValueError(f"invalid time {value!r}: expected HH:MM")
+    return f"{h:02d}:{m:02d}"
