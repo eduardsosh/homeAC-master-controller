@@ -13,13 +13,13 @@ jobs:
         run: nssm stop ACmaster   # your actual NSSM service name
 
       - name: Sync code (preserve the venv!)
-        shell: pwsh
+        shell: powershell
         run: |
           robocopy . C:\homeAC-master-controller-main /MIR /XD .venv .git __pycache__
           if ($LASTEXITCODE -lt 8) { exit 0 } else { exit $LASTEXITCODE }
 
       - name: Install requirements
-        shell: pwsh
+        shell: powershell
         run: |
           & "C:\homeAC-master-controller-main\.venv\Scripts\python.exe" -m pip install -r "C:\homeAC-master-controller-main\requirements.txt"
 
