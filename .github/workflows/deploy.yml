@@ -9,6 +9,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Run smoke tests
+        shell: powershell
+        run: |
+          & "C:\homeAC-master-controller-main\.venv\Scripts\python.exe" -m unittest discover -s tests -t . -v
+
       - name: Stop service
         run: nssm stop ACmaster   # your actual NSSM service name
 
@@ -25,3 +30,9 @@ jobs:
 
       - name: Start service
         run: nssm start ACmaster
+
+      - name: Service status
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 5
+          nssm status ACmaster
