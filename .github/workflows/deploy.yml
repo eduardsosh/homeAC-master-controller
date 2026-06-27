@@ -35,7 +35,7 @@ jobs:
         shell: powershell
         run: |
           Start-Sleep -Seconds 5
-          $status = (nssm status ACmaster | Out-String).Trim()
+          $status = ((nssm status ACmaster | Out-String) -replace "[^A-Z_]", "")
           Write-Host "Service status: $status"
           if ($status -ne "SERVICE_RUNNING") {
             Write-Error "ACmaster is not running (status: $status)"
